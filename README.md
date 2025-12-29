@@ -16,4 +16,8 @@ pip install -r requirements.txt
 uvicorn backend:app --reload
 streamlit run app.py
 
+## Apify Integration
+This project is designed to integrate Apify Actors for real-world lead scraping.
+Actor logic can be plugged into backend.py using ApifyClient.
+
 License: MIT
