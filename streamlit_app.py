@@ -1,182 +1,122 @@
 import streamlit as st
-import requests
 import pandas as pd
-import pycountry
+import os
+from apify_client import ApifyClient
+from datetime import datetime
 
 # -------------------------------------------------
-# PAGE CONFIG
+# CONFIG
 # -------------------------------------------------
 st.set_page_config(
     page_title="Multi-Sector Lead Generator",
-    layout="wide"
+    page_icon="🌍",
+    layout="wide",
 )
 
+APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+
+if not APIFY_TOKEN:
+    st.error("APIFY_TOKEN is missing. Add it in Streamlit Secrets.")
+    st.stop()
+
+client = ApifyClient(APIFY_TOKEN)
+
+ACTOR_ID = "leadforge-ai-apify"  # 🔁 replace with your actual Actor ID
+
+# -------------------------------------------------
+# UI
+# -------------------------------------------------
 st.title("🌍 Multi-Sector Lead Generator")
 
-# -------------------------------------------------
-# SECTORS (24)
-# -------------------------------------------------
 SECTORS = [
-    "Healthcare",
-    "Real Estate",
-    "Manufacturing",
-    "IT & Technology",
-    "Education & Training",
-    "Legal Services",
-    "Financial Services",
-    "Hospitality & Tourism",
-    "Retail & E-commerce",
-    "Food & Beverage",
-    "Construction",
-    "Automotive",
-    "Marketing & Advertising",
-    "Consulting",
-    "Logistics & Transportation",
-    "Beauty & Wellness",
-    "Entertainment & Media",
-    "Agriculture",
-    "Energy & Utilities",
-    "Telecommunications",
-    "Insurance",
-    "Professional Services",
-    "Non-Profit & NGO",
-    "Sports & Fitness"
+    "Healthcare", "Dentists", "Real Estate", "Lawyers", "Restaurants",
+    "Construction", "Education", "Automotive", "Finance", "Insurance",
+    "IT Services", "Marketing Agencies", "Beauty & Wellness",
+    "Gyms & Fitness", "Hotels", "Travel Agencies",
+    "Manufacturing", "Logistics", "Retail",
+    "E-commerce", "Cleaning Services",
+    "Home Services", "Consultants", "Others"
 ]
 
-# -------------------------------------------------
-# COUNTRIES (ALL)
-# -------------------------------------------------
-COUNTRIES = sorted([c.name for c in pycountry.countries])
+COUNTRIES = [
+    "Australia", "United States", "United Kingdom", "Canada",
+    "India", "Singapore", "UAE", "New Zealand",
+    "Germany", "France", "Spain", "Italy",
+    "Netherlands", "Ireland", "South Africa",
+    "Malaysia", "Philippines", "Indonesia",
+    "Thailand", "Japan", "South Korea"
+]
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    sector = st.selectbox("Sector", SECTORS)
+
+with col2:
+    city = st.text_input("City / Suburb", value="Colebee")
+
+with col3:
+    postcode = st.text_input("Postcode", value="2761")
+
+col4, col5 = st.columns([2, 3])
+
+with col4:
+    country = st.selectbox("Country", COUNTRIES)
+
+with col5:
+    max_results = st.slider("Max Results", 10, 300, 100)
+
+st.markdown("### 🔑 Keywords (Optional)")
+keywords = st.text_area(
+    "Enter keywords (comma or new line separated)",
+    placeholder="dentist, dental clinic\ncosmetic dentist\nimplant specialist"
+)
 
 # -------------------------------------------------
-# HELPERS
+# GENERATE LEADS
 # -------------------------------------------------
-def parse_keywords(text: str):
-    if not text:
-        return []
-    raw = text.replace("\n", ",").split(",")
-    return [k.strip() for k in raw if k.strip()]
+if st.button("🚀 Generate Leads"):
+    with st.spinner("Running Apify Actor…"):
+        run_input = {
+            "sector": sector,
+            "city": city.strip(),
+            "postcode": postcode.strip(),
+            "country": country,
+            "maxResults": max_results,
+            "keyword": keywords.strip(),
+        }
 
-# -------------------------------------------------
-# INPUT FORM
-# -------------------------------------------------
-with st.form("lead_form"):
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        sector = st.selectbox("Sector", SECTORS, index=0)
-
-    with col2:
-        city = st.text_input("City / Suburb", "Colebee")
-
-    with col3:
-        postcode = st.text_input("Postcode", "2761")
-
-    col4, col5 = st.columns(2)
-
-    with col4:
-        country = st.selectbox(
-            "Country",
-            COUNTRIES,
-            index=COUNTRIES.index("Australia") if "Australia" in COUNTRIES else 0
-        )
-
-    with col5:
-        max_results = st.slider(
-            "Max Results",
-            min_value=10,
-            max_value=500,
-            value=100,
-            step=10
-        )
-
-    # -------------------------------------------------
-    # KEYWORDS SECTION (NEW)
-    # -------------------------------------------------
-    st.markdown("### 🔑 Keywords (Optional)")
-
-    keywords_input = st.text_area(
-        "Enter keywords (comma or new line separated)",
-        placeholder="dentist, dental clinic\ncosmetic dentist\nimplant specialist"
-    )
-
-    submitted = st.form_submit_button("🚀 Generate Leads")
-
-# -------------------------------------------------
-# ACTION
-# -------------------------------------------------
-if submitted:
-    keywords = parse_keywords(keywords_input)
-
-    with st.spinner("Generating leads… please wait"):
         try:
-            res = requests.post(
-                "http://localhost:8000/generate-leads",
-                json={
-                    "sector": sector,
-                    "city": city,
-                    "postcode": postcode,
-                    "country": country,
-                    "keywords": keywords,   # 👈 added to payload
-                    "maxResults": max_results
-                },
-                timeout=300
-            )
+            run = client.actor(ACTOR_ID).call(run_input=run_input)
+            dataset_id = run["defaultDatasetId"]
+
+            items = list(client.dataset(dataset_id).iterate_items())
+
         except Exception as e:
-            st.error(f"❌ Backend connection failed: {e}")
+            st.error(f"Failed to run actor: {e}")
             st.stop()
 
-    if res.status_code != 200:
-        st.error("❌ Failed to generate leads")
-        st.text(res.text)
+    # -------------------------------------------------
+    # RESULTS
+    # -------------------------------------------------
+    if not items:
+        st.warning("No leads returned.")
         st.stop()
 
-    data = res.json()
+    df = pd.DataFrame(items)
+
+    st.success(f"✅ {len(df)} leads found")
+    st.dataframe(df, use_container_width=True)
 
     # -------------------------------------------------
-    # NORMALIZE BACKEND RESPONSE (CRITICAL FIX)
+    # DOWNLOAD
     # -------------------------------------------------
-    if isinstance(data, dict) and "leads" in data:
-        leads = data["leads"]
-    elif isinstance(data, dict) and "data" in data:
-        leads = data["data"]
-    elif isinstance(data, list):
-        leads = data
-    else:
-        leads = []
+    csv = df.to_csv(index=False)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
 
-    # -------------------------------------------------
-    # OUTPUT UX
-    # -------------------------------------------------
-    if not leads:
-        st.warning("No leads returned")
-        st.json(data)
-        st.stop()
-
-    df = pd.DataFrame(leads)
-
-    st.success(f"✅ {len(df)} leads generated")
-
-    if keywords:
-        st.info(f"🔑 Keywords used: {', '.join(keywords)}")
-
-    st.subheader("🔍 Preview (first 10 results)")
-    st.dataframe(df.head(10), use_container_width=True)
-
-    col_dl1, col_dl2 = st.columns(2)
-
-    with col_dl1:
-        st.download_button(
-            "⬇ Download CSV",
-            df.to_csv(index=False),
-            file_name="leads.csv",
-            mime="text/csv"
-        )
-
-    with col_dl2:
-        st.download_button(
-            "⬇ Download JSON",
-            df.to_json(orient="records"),
-            file_name="leads.json",
-            mime="application/json"
-        )
+    st.download_button(
+        label="⬇ Download CSV",
+        data=csv,
+        file_name=f"leads_{sector}_{city}_{timestamp}.csv",
+        mime="text/csv",
+    )
