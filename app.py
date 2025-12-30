@@ -3,19 +3,19 @@ import requests
 import pandas as pd
 import pycountry
 
-# ---------------------------------
+# -------------------------------------------------
 # PAGE CONFIG
-# ---------------------------------
+# -------------------------------------------------
 st.set_page_config(
-    page_title="Lead Generator",
+    page_title="Multi-Sector Lead Generator",
     layout="wide"
 )
 
 st.title("🌍 Multi-Sector Lead Generator")
 
-# ---------------------------------
-# SECTOR LIST (24 SECTORS)
-# ---------------------------------
+# -------------------------------------------------
+# SECTORS (24)
+# -------------------------------------------------
 SECTORS = [
     "Healthcare",
     "Real Estate",
@@ -43,23 +43,19 @@ SECTORS = [
     "Sports & Fitness"
 ]
 
-# ---------------------------------
-# COUNTRY LIST (ALL COUNTRIES)
-# ---------------------------------
+# -------------------------------------------------
+# COUNTRIES (ALL)
+# -------------------------------------------------
 COUNTRIES = sorted([c.name for c in pycountry.countries])
 
-# ---------------------------------
+# -------------------------------------------------
 # INPUT FORM
-# ---------------------------------
+# -------------------------------------------------
 with st.form("lead_form"):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        sector = st.selectbox(
-            "Sector",
-            SECTORS,
-            index=0
-        )
+        sector = st.selectbox("Sector", SECTORS, index=0)
 
     with col2:
         city = st.text_input("City / Suburb", "Colebee")
@@ -87,22 +83,26 @@ with st.form("lead_form"):
 
     submitted = st.form_submit_button("🚀 Generate Leads")
 
-# ---------------------------------
+# -------------------------------------------------
 # ACTION
-# ---------------------------------
+# -------------------------------------------------
 if submitted:
     with st.spinner("Generating leads… please wait"):
-        res = requests.post(
-            "http://localhost:8000/generate-leads",
-            json={
-                "sector": sector,
-                "city": city,
-                "postcode": postcode,
-                "country": country,
-                "maxResults": max_results
-            },
-            timeout=300
-        )
+        try:
+            res = requests.post(
+                "http://localhost:8000/generate-leads",
+                json={
+                    "sector": sector,
+                    "city": city,
+                    "postcode": postcode,
+                    "country": country,
+                    "maxResults": max_results
+                },
+                timeout=300
+            )
+        except Exception as e:
+            st.error(f"❌ Backend connection failed: {e}")
+            st.stop()
 
     if res.status_code != 200:
         st.error("❌ Failed to generate leads")
@@ -111,27 +111,28 @@ if submitted:
 
     data = res.json()
 
-    # ---------------------------------
-    # NORMALIZE RESPONSE
-    # ---------------------------------
-    if isinstance(data, dict) and "data" in data:
+    # -------------------------------------------------
+    # NORMALIZE BACKEND RESPONSE (CRITICAL FIX)
+    # -------------------------------------------------
+    if isinstance(data, dict) and "leads" in data:
+        leads = data["leads"]
+    elif isinstance(data, dict) and "data" in data:
         leads = data["data"]
     elif isinstance(data, list):
         leads = data
     else:
-        st.warning("No leads returned")
-        st.json(data)
-        st.stop()
+        leads = []
 
+    # -------------------------------------------------
+    # OUTPUT UX
+    # -------------------------------------------------
     if not leads:
-        st.warning("No leads found for this search")
+        st.warning("No leads returned")
+        st.json(data)  # debug visibility
         st.stop()
 
     df = pd.DataFrame(leads)
 
-    # ---------------------------------
-    # OUTPUT UX
-    # ---------------------------------
     st.success(f"✅ {len(df)} leads generated")
 
     st.subheader("🔍 Preview (first 10 results)")
