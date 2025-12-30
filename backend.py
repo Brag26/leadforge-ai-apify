@@ -50,7 +50,7 @@ def generate_leads(req: LeadRequest):
     try:
         print("🚀 Triggering Apify actor...")
 
-        run = client.actor("Brag26/multi-sector-lead-generator").call(
+        run = client.actor("sree_brag/multi-sector-lead-generator-actor").call(
             run_input=req.dict(),
             timeout_secs=120
         )
