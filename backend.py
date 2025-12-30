@@ -1,24 +1,33 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import random
+from apify_client import ApifyClient
+import os
 
-app = FastAPI(title="LeadForge AI Backend")
+app = FastAPI()
+
+client = ApifyClient(os.environ.get("APIFY_API_TOKEN"))
 
 class LeadRequest(BaseModel):
     sector: str
     city: str
-    filters: dict
+    keyword: str | None = None
+    maxResults: int = 10
 
 @app.post("/generate-leads")
-def generate_leads(request: LeadRequest):
-    leads = []
-    for i in range(10):
-        leads.append({
-            "Name": f"Lead {i+1}",
-            "Phone": f"+91 9{random.randint(100000000,999999999)}",
-            "Email": f"lead{i+1}@example.com",
-            "City": request.city,
-            "Sector": request.sector,
-            "Score": random.randint(65, 95)
-        })
-    return {"status": "success","count": len(leads),"leads": leads}
+def generate_leads(req: LeadRequest):
+    run = client.actor(
+        "Brag26/multi-sector-lead-generator"
+    ).call(run_input={
+        "sector": req.sector,
+        "city": req.city,
+        "keyword": req.keyword,
+        "maxResults": req.maxResults
+    })
+
+    dataset_id = run["defaultDatasetId"]
+    items = client.dataset(dataset_id).list_items().items
+
+    return {
+        "count": len(items),
+        "leads": items
+    }
