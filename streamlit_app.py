@@ -21,7 +21,7 @@ if not APIFY_TOKEN:
 
 client = ApifyClient(APIFY_TOKEN)
 
-ACTOR_ID = "leadforge-ai-apify"  # 🔁 replace with your actual Actor ID
+ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"  # 🔁 replace with your actual Actor ID
 
 # -------------------------------------------------
 # UI
