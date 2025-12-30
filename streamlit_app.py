@@ -4,6 +4,33 @@ import os
 from apify_client import ApifyClient
 from datetime import datetime
 
+def check_login():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        return
+
+    st.title("🔐 Login Required")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        users = st.secrets["auth"]["users"]
+
+        for user in users:
+            if username == user["username"] and password == user["password"]:
+                st.session_state.authenticated = True
+                st.success("Login successful")
+                st.rerun()
+
+        st.error("Invalid username or password")
+
+    st.stop()
+
+check_login()
+
 # -------------------------------------------------
 # CONFIG
 # -------------------------------------------------
