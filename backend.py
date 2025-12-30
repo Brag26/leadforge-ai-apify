@@ -44,43 +44,27 @@ def health():
 # -------------------------------------------------
 @app.post("/generate-leads")
 def generate_leads(req: LeadRequest):
-    """
-    Triggers the Apify actor and returns extracted leads.
-    Always returns JSON.
-    """
+    print("🔥 /generate-leads called")
+    print("📥 Request:", req.dict())
+
     try:
-        # Call Apify Actor
-        run = client.actor(
-            "Brag26/multi-sector-lead-generator"
-        ).call(
-            run_input={
-                "sector": req.sector,
-                "city": req.city,
-                "keyword": req.keyword,
-                "postcode": req.postcode,
-                "country": req.country,
-                "maxResults": req.maxResults,
-            }
+        print("🚀 Triggering Apify actor...")
+
+        run = client.actor("Brag26/multi-sector-lead-generator").call(
+            run_input=req.dict(),
+            timeout_secs=120
         )
 
-        # Fetch dataset results
-        dataset_id = run.get("defaultDatasetId")
-        if not dataset_id:
-            return {
-                "count": 0,
-                "leads": [],
-                "error": "Actor did not return a dataset ID"
-            }
+        print("✅ Actor finished")
+        print("📦 Run info:", run)
 
+        dataset_id = run.get("defaultDatasetId")
         items = client.dataset(dataset_id).list_items().items
 
-        return {
-            "count": len(items),
-            "leads": items
-        }
+        return {"count": len(items), "leads": items}
 
     except Exception as e:
-        # Never crash the frontend
+        print("❌ BACKEND ERROR:", repr(e))
         return {
             "count": 0,
             "leads": [],
