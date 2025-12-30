@@ -1,33 +1,69 @@
 import streamlit as st
 import requests
 import pandas as pd
-from sectors import SECTORS
 
-st.set_page_config(page_title="LeadForge AI", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="LeadForge AI", layout="wide")
 
 st.title("🚀 LeadForge AI")
-st.subheader("Multi-Sector Lead Generation Platform")
-st.caption("Built for Apify 1M Challenge")
+st.caption("Powered by Apify Actors + AI")
 
-st.sidebar.header("Lead Configuration")
-sector = st.sidebar.selectbox("Industry", list(SECTORS.keys()))
-city = st.sidebar.text_input("Target City", "Chennai")
+# Sidebar
+st.sidebar.header("Lead Search")
 
-filters = {}
-for f in SECTORS[sector]["filters"]:
-    filters[f] = st.sidebar.text_input(f)
+sector = st.sidebar.selectbox(
+    "Sector",
+    ["Healthcare", "Real Estate", "Manufacturing", "IT", "Education"]
+)
+city = st.sidebar.text_input("City", "Chennai")
+keyword = st.sidebar.text_input("Keyword", "")
+postcode = st.sidebar.text_input("Postcode (optional)", "")
+country = st.sidebar.text_input("Country", "Australia")
+max_results = st.sidebar.slider("Max Results", 1, 20, 10)
 
-generate = st.sidebar.button("Generate Leads")
+if st.sidebar.button("Generate Leads"):
+    with st.spinner("Running Apify Actor…"):
+        response = requests.post(
+            "http://localhost:8000/generate-leads",
+            json={
+                "sector": sector,
+                "city": city,
+                "keyword": keyword,
+                "postcode": postcode,
+                "country": country,
+                "maxResults": max_results,
+            },
+            timeout=300,
+        )
 
-if generate:
-    with st.spinner("Generating leads..."):
-        payload = {"sector": sector,"city": city,"filters": filters}
-        res = requests.post("http://localhost:8000/generate-leads", json=payload)
-        data = res.json()
-        df = pd.DataFrame(data["leads"])
+    data = response.json()
+    leads = data.get("leads", [])
 
-    st.success(f"{data['count']} Leads Generated")
-    st.dataframe(df, use_container_width=True)
-    st.download_button("Download CSV", df.to_csv(index=False), "leads.csv", "text/csv")
-else:
-    st.info("Select industry & filters from sidebar to start")
+    if not leads:
+        st.warning("No leads found.")
+    else:
+        df = pd.DataFrame(leads)
+
+        # Reorder columns nicely
+        preferred_order = [
+            "name",
+            "category",
+            "phone",
+            "website",
+            "rating",
+            "reviewCount",
+            "address",
+            "googleMapsUrl",
+            "searchQuery",
+        ]
+
+        df = df[[c for c in preferred_order if c in df.columns]]
+
+        st.success(f"✅ {len(df)} leads found")
+        st.dataframe(df, use_container_width=True)
+
+        st.download_button(
+            "⬇️ Download CSV",
+            df.to_csv(index=False),
+            "leads.csv",
+            "text/csv",
+        )
