@@ -49,6 +49,15 @@ SECTORS = [
 COUNTRIES = sorted([c.name for c in pycountry.countries])
 
 # -------------------------------------------------
+# HELPERS
+# -------------------------------------------------
+def parse_keywords(text: str):
+    if not text:
+        return []
+    raw = text.replace("\n", ",").split(",")
+    return [k.strip() for k in raw if k.strip()]
+
+# -------------------------------------------------
 # INPUT FORM
 # -------------------------------------------------
 with st.form("lead_form"):
@@ -81,12 +90,24 @@ with st.form("lead_form"):
             step=10
         )
 
+    # -------------------------------------------------
+    # KEYWORDS SECTION (NEW)
+    # -------------------------------------------------
+    st.markdown("### 🔑 Keywords (Optional)")
+
+    keywords_input = st.text_area(
+        "Enter keywords (comma or new line separated)",
+        placeholder="dentist, dental clinic\ncosmetic dentist\nimplant specialist"
+    )
+
     submitted = st.form_submit_button("🚀 Generate Leads")
 
 # -------------------------------------------------
 # ACTION
 # -------------------------------------------------
 if submitted:
+    keywords = parse_keywords(keywords_input)
+
     with st.spinner("Generating leads… please wait"):
         try:
             res = requests.post(
@@ -96,6 +117,7 @@ if submitted:
                     "city": city,
                     "postcode": postcode,
                     "country": country,
+                    "keywords": keywords,   # 👈 added to payload
                     "maxResults": max_results
                 },
                 timeout=300
@@ -128,12 +150,15 @@ if submitted:
     # -------------------------------------------------
     if not leads:
         st.warning("No leads returned")
-        st.json(data)  # debug visibility
+        st.json(data)
         st.stop()
 
     df = pd.DataFrame(leads)
 
     st.success(f"✅ {len(df)} leads generated")
+
+    if keywords:
+        st.info(f"🔑 Keywords used: {', '.join(keywords)}")
 
     st.subheader("🔍 Preview (first 10 results)")
     st.dataframe(df.head(10), use_container_width=True)
