@@ -10,7 +10,9 @@ client = ApifyClient(os.environ.get("APIFY_API_TOKEN"))
 class LeadRequest(BaseModel):
     sector: str
     city: str
-    keyword: str | None = None
+    keyword: str | None = ""
+    postcode: str | None = ""
+    country: str | None = "Australia"
     maxResults: int = 10
 
 @app.post("/generate-leads")
@@ -21,6 +23,8 @@ def generate_leads(req: LeadRequest):
         "sector": req.sector,
         "city": req.city,
         "keyword": req.keyword,
+        "postcode": req.postcode,
+        "country": req.country,
         "maxResults": req.maxResults
     })
 
