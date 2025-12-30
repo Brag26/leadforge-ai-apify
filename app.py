@@ -35,7 +35,17 @@ if st.sidebar.button("Generate Leads"):
             timeout=300,
         )
 
+if response.status_code != 200:
+    st.error(f"Backend error {response.status_code}")
+    st.code(response.text)
+    st.stop()
+
+try:
     data = response.json()
+except Exception:
+    st.error("Backend did not return JSON")
+    st.code(response.text)
+    st.stop()
     leads = data.get("leads", [])
 
     if not leads:
