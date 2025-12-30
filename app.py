@@ -1,79 +1,156 @@
 import streamlit as st
 import requests
 import pandas as pd
+import pycountry
 
-st.set_page_config(page_title="LeadForge AI", layout="wide")
-
-st.title("🚀 LeadForge AI")
-st.caption("Powered by Apify Actors + AI")
-
-# Sidebar
-st.sidebar.header("Lead Search")
-
-sector = st.sidebar.selectbox(
-    "Sector",
-    ["Healthcare", "Real Estate", "Manufacturing", "IT", "Education"]
+# ---------------------------------
+# PAGE CONFIG
+# ---------------------------------
+st.set_page_config(
+    page_title="Lead Generator",
+    layout="wide"
 )
-city = st.sidebar.text_input("City", "Chennai")
-keyword = st.sidebar.text_input("Keyword", "")
-postcode = st.sidebar.text_input("Postcode (optional)", "")
-country = st.sidebar.text_input("Country", "Australia")
-max_results = st.sidebar.slider("Max Results", 1, 20, 10)
 
-if st.sidebar.button("Generate Leads"):
-    with st.spinner("Running Apify Actor…"):
-        response = requests.post(
+st.title("🌍 Multi-Sector Lead Generator")
+
+# ---------------------------------
+# SECTOR LIST (24 SECTORS)
+# ---------------------------------
+SECTORS = [
+    "Healthcare",
+    "Real Estate",
+    "Manufacturing",
+    "IT & Technology",
+    "Education & Training",
+    "Legal Services",
+    "Financial Services",
+    "Hospitality & Tourism",
+    "Retail & E-commerce",
+    "Food & Beverage",
+    "Construction",
+    "Automotive",
+    "Marketing & Advertising",
+    "Consulting",
+    "Logistics & Transportation",
+    "Beauty & Wellness",
+    "Entertainment & Media",
+    "Agriculture",
+    "Energy & Utilities",
+    "Telecommunications",
+    "Insurance",
+    "Professional Services",
+    "Non-Profit & NGO",
+    "Sports & Fitness"
+]
+
+# ---------------------------------
+# COUNTRY LIST (ALL COUNTRIES)
+# ---------------------------------
+COUNTRIES = sorted([c.name for c in pycountry.countries])
+
+# ---------------------------------
+# INPUT FORM
+# ---------------------------------
+with st.form("lead_form"):
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        sector = st.selectbox(
+            "Sector",
+            SECTORS,
+            index=0
+        )
+
+    with col2:
+        city = st.text_input("City / Suburb", "Colebee")
+
+    with col3:
+        postcode = st.text_input("Postcode", "2761")
+
+    col4, col5 = st.columns(2)
+
+    with col4:
+        country = st.selectbox(
+            "Country",
+            COUNTRIES,
+            index=COUNTRIES.index("Australia") if "Australia" in COUNTRIES else 0
+        )
+
+    with col5:
+        max_results = st.slider(
+            "Max Results",
+            min_value=10,
+            max_value=500,
+            value=100,
+            step=10
+        )
+
+    submitted = st.form_submit_button("🚀 Generate Leads")
+
+# ---------------------------------
+# ACTION
+# ---------------------------------
+if submitted:
+    with st.spinner("Generating leads… please wait"):
+        res = requests.post(
             "http://localhost:8000/generate-leads",
             json={
                 "sector": sector,
                 "city": city,
-                "keyword": keyword,
                 "postcode": postcode,
                 "country": country,
-                "maxResults": max_results,
+                "maxResults": max_results
             },
-            timeout=300,
+            timeout=300
         )
 
-if response.status_code != 200:
-    st.error(f"Backend error {response.status_code}")
-    st.code(response.text)
-    st.stop()
+    if res.status_code != 200:
+        st.error("❌ Failed to generate leads")
+        st.text(res.text)
+        st.stop()
 
-try:
-    data = response.json()
-except Exception:
-    st.error("Backend did not return JSON")
-    st.code(response.text)
-    st.stop()
-    leads = data.get("leads", [])
+    data = res.json()
+
+    # ---------------------------------
+    # NORMALIZE RESPONSE
+    # ---------------------------------
+    if isinstance(data, dict) and "data" in data:
+        leads = data["data"]
+    elif isinstance(data, list):
+        leads = data
+    else:
+        st.warning("No leads returned")
+        st.json(data)
+        st.stop()
 
     if not leads:
-        st.warning("No leads found.")
-    else:
-        df = pd.DataFrame(leads)
+        st.warning("No leads found for this search")
+        st.stop()
 
-        # Reorder columns nicely
-        preferred_order = [
-            "name",
-            "category",
-            "phone",
-            "website",
-            "rating",
-            "reviewCount",
-            "address",
-            "googleMapsUrl",
-            "searchQuery",
-        ]
+    df = pd.DataFrame(leads)
 
-        df = df[[c for c in preferred_order if c in df.columns]]
+    # ---------------------------------
+    # OUTPUT UX
+    # ---------------------------------
+    st.success(f"✅ {len(df)} leads generated")
 
-        st.success(f"✅ {len(df)} leads found")
-        st.dataframe(df, use_container_width=True)
+    st.subheader("🔍 Preview (first 10 results)")
+    st.dataframe(df.head(10), use_container_width=True)
 
+    col_dl1, col_dl2 = st.columns(2)
+
+    with col_dl1:
         st.download_button(
-            "⬇️ Download CSV",
+            "⬇ Download CSV",
             df.to_csv(index=False),
-            "leads.csv",
-            "text/csv",
+            file_name="leads.csv",
+            mime="text/csv"
+        )
+
+    with col_dl2:
+        st.download_button(
+            "⬇ Download JSON",
+            df.to_json(orient="records"),
+            file_name="leads.json",
+            mime="application/json"
         )
