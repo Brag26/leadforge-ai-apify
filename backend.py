@@ -26,10 +26,11 @@ client = ApifyClient(APIFY_TOKEN)
 # -------------------------------------------------
 class LeadRequest(BaseModel):
     sector: str
-    city: str
-    keyword: str | None = ""
-    postcode: str | None = ""
     country: str | None = "Australia"
+    state: str | None = ""
+    city: str | None = ""
+    postcode: str | None = ""
+    keyword: str | None = ""
     maxResults: int = 10
 
 # -------------------------------------------------
