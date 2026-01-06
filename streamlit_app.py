@@ -4,6 +4,9 @@ import os
 from apify_client import ApifyClient
 from datetime import datetime
 
+# -------------------------------------------------
+# LOGIN / AUTH
+# -------------------------------------------------
 def check_login():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -17,22 +20,24 @@ def check_login():
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        users = st.secrets["auth"]["users"]
+        users = st.secrets["users"]  # ✅ Correct access
 
-        for user in users:
-            if username == user["username"] and password == user["password"]:
-                st.session_state.authenticated = True
-                st.success("Login successful")
-                st.rerun()
-
-        st.error("Invalid username or password")
+        if username in users and password == users[username]["password"]:
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.session_state.role = users[username]["role"]
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Invalid username or password")
 
     st.stop()
+
 
 check_login()
 
 # -------------------------------------------------
-# CONFIG
+# PAGE CONFIG (MUST BE AFTER LOGIN CHECK)
 # -------------------------------------------------
 st.set_page_config(
     page_title="Multi-Sector Lead Generator",
@@ -40,21 +45,33 @@ st.set_page_config(
     layout="wide",
 )
 
-APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+# -------------------------------------------------
+# CONFIG
+# -------------------------------------------------
+APIFY_TOKEN = st.secrets.get("APIFY_TOKEN")
 
 if not APIFY_TOKEN:
-    st.error("APIFY_TOKEN is missing. Add it in Streamlit Secrets.")
+    st.error("APIFY_TOKEN is missing. Add it to Streamlit Secrets.")
     st.stop()
 
 client = ApifyClient(APIFY_TOKEN)
 
-ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"  # 🔁 replace with your actual Actor ID
+ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"  # replace if needed
 
 # -------------------------------------------------
-# UI
+# HEADER
 # -------------------------------------------------
 st.title("🌍 Multi-Sector Lead Generator")
+st.caption(f"Logged in as **{st.session_state.username}** ({st.session_state.role})")
 
+# Logout
+if st.button("🚪 Logout"):
+    st.session_state.clear()
+    st.rerun()
+
+# -------------------------------------------------
+# INPUT OPTIONS
+# -------------------------------------------------
 SECTORS = [
     "Healthcare", "Dentists", "Real Estate", "Lawyers", "Restaurants",
     "Construction", "Education", "Automotive", "Finance", "Insurance",
@@ -116,18 +133,17 @@ if st.button("🚀 Generate Leads"):
         try:
             run = client.actor(ACTOR_ID).call(run_input=run_input)
             dataset_id = run["defaultDatasetId"]
-
             items = list(client.dataset(dataset_id).iterate_items())
 
         except Exception as e:
-            st.error(f"Failed to run actor: {e}")
+            st.error(f"❌ Failed to run actor: {e}")
             st.stop()
 
     # -------------------------------------------------
     # RESULTS
     # -------------------------------------------------
     if not items:
-        st.warning("No leads returned.")
+        st.warning("⚠️ No leads returned.")
         st.stop()
 
     df = pd.DataFrame(items)
