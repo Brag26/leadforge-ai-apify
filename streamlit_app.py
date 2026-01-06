@@ -1,173 +1,149 @@
 import streamlit as st
-import requests
 import pandas as pd
-import pycountry
+import os
+from apify_client import ApifyClient
+from datetime import datetime
+
+def check_login():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        return
+
+    st.title("🔐 Login Required")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        users = st.secrets["auth"]["users"]
+
+        for user in users:
+            if username == user["username"] and password == user["password"]:
+                st.session_state.authenticated = True
+                st.success("Login successful")
+                st.rerun()
+
+        st.error("Invalid username or password")
+
+    st.stop()
+
+check_login()
 
 # -------------------------------------------------
-# PAGE CONFIG
+# CONFIG
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Multi-LLM AI-Powered Lead Generator",
-    layout="wide"
+    page_title="Multi-Sector Lead Generator",
+    page_icon="🌍",
+    layout="wide",
 )
 
-st.title("🌍 Multi-LLM AI-Powered Lead Generator")
+APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+
+if not APIFY_TOKEN:
+    st.error("APIFY_TOKEN is missing. Add it in Streamlit Secrets.")
+    st.stop()
+
+client = ApifyClient(APIFY_TOKEN)
+
+ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"  # 🔁 replace with your actual Actor ID
 
 # -------------------------------------------------
-# SECTORS (24) — must match input_schema.json
+# UI
 # -------------------------------------------------
+st.title("🌍 Multi-Sector Lead Generator")
+
 SECTORS = [
-    "Healthcare",
-    "Real Estate",
-    "Manufacturing",
-    "IT & Technology",
-    "Education & Training",
-    "Legal Services",
-    "Financial Services",
-    "Hospitality & Tourism",
-    "Retail & E-commerce",
-    "Food & Beverage",
-    "Construction",
-    "Automotive",
-    "Marketing & Advertising",
-    "Consulting",
-    "Logistics & Transportation",
-    "Beauty & Wellness",
-    "Entertainment & Media",
-    "Agriculture",
-    "Energy & Utilities",
-    "Telecommunications",
-    "Insurance",
-    "Professional Services",
-    "Non-Profit & NGO",
-    "Sports & Fitness"
+    "Healthcare", "Dentists", "Real Estate", "Lawyers", "Restaurants",
+    "Construction", "Education", "Automotive", "Finance", "Insurance",
+    "IT Services", "Marketing Agencies", "Beauty & Wellness",
+    "Gyms & Fitness", "Hotels", "Travel Agencies",
+    "Manufacturing", "Logistics", "Retail",
+    "E-commerce", "Cleaning Services",
+    "Home Services", "Consultants", "Others"
 ]
 
-# -------------------------------------------------
-# COUNTRIES
-# -------------------------------------------------
-COUNTRIES = sorted([c.name for c in pycountry.countries])
+COUNTRIES = [
+    "Australia", "United States", "United Kingdom", "Canada",
+    "India", "Singapore", "UAE", "New Zealand",
+    "Germany", "France", "Spain", "Italy",
+    "Netherlands", "Ireland", "South Africa",
+    "Malaysia", "Philippines", "Indonesia",
+    "Thailand", "Japan", "South Korea"
+]
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    sector = st.selectbox("Sector", SECTORS)
+
+with col2:
+    city = st.text_input("City / Suburb", value="Colebee")
+
+with col3:
+    postcode = st.text_input("Postcode", value="2761")
+
+col4, col5 = st.columns([2, 3])
+
+with col4:
+    country = st.selectbox("Country", COUNTRIES)
+
+with col5:
+    max_results = st.slider("Max Results", 10, 300, 100)
+
+st.markdown("### 🔑 Keywords (Optional)")
+keywords = st.text_area(
+    "Enter keywords (comma or new line separated)",
+    placeholder="dentist, dental clinic\ncosmetic dentist\nimplant specialist"
+)
 
 # -------------------------------------------------
-# INPUT FORM (SCHEMA MATCHED)
+# GENERATE LEADS
 # -------------------------------------------------
-with st.form("lead_form"):
-    col1, col2, col3 = st.columns(3)
+if st.button("🚀 Generate Leads"):
+    with st.spinner("Running Apify Actor…"):
+        run_input = {
+            "sector": sector,
+            "city": city.strip(),
+            "postcode": postcode.strip(),
+            "country": country,
+            "maxResults": max_results,
+            "keyword": keywords.strip(),
+        }
 
-    with col1:
-        sector = st.selectbox("Sector", SECTORS)
-
-    with col2:
-        country = st.selectbox(
-            "Country (Optional)",
-            [""] + COUNTRIES,
-            index=COUNTRIES.index("Australia") + 1 if "Australia" in COUNTRIES else 0
-        )
-
-    with col3:
-        state = st.text_input("State / Province (Optional)", "")
-
-    col4, col5, col6 = st.columns(3)
-
-    with col4:
-        city = st.text_input("City / Suburb (Optional)", "")
-
-    with col5:
-        postcode = st.text_input("Postcode / ZIP Code (Optional)", "")
-
-    with col6:
-        max_results = st.slider(
-            "Maximum Results",
-            min_value=1,
-            max_value=100,
-            value=10
-        )
-
-    st.markdown("### 🔑 Keyword (Optional)")
-
-    keyword = st.text_input(
-        "Keyword to refine search",
-        placeholder="e.g., dental clinic, software company"
-    )
-
-    submitted = st.form_submit_button("🚀 Generate Leads")
-
-# -------------------------------------------------
-# ACTION
-# -------------------------------------------------
-if submitted:
-    payload = {
-        "sector": sector,
-        "country": country,
-        "state": state,
-        "city": city,
-        "postcode": postcode,
-        "keyword": keyword,
-        "maxResults": max_results
-    }
-
-    # remove empty optional fields
-    payload = {k: v for k, v in payload.items() if v not in ["", None]}
-
-    with st.spinner("Generating leads… please wait"):
         try:
-            res = requests.post(
-                "http://localhost:8000/generate-leads",
-                json=payload,
-                timeout=300
-            )
+            run = client.actor(ACTOR_ID).call(run_input=run_input)
+            dataset_id = run["defaultDatasetId"]
+
+            items = list(client.dataset(dataset_id).iterate_items())
+
         except Exception as e:
-            st.error(f"❌ Backend connection failed: {e}")
+            st.error(f"Failed to run actor: {e}")
             st.stop()
 
-    if res.status_code != 200:
-        st.error("❌ Failed to generate leads")
-        st.text(res.text)
+    # -------------------------------------------------
+    # RESULTS
+    # -------------------------------------------------
+    if not items:
+        st.warning("No leads returned.")
         st.stop()
 
-    data = res.json()
+    df = pd.DataFrame(items)
+
+    st.success(f"✅ {len(df)} leads found")
+    st.dataframe(df, use_container_width=True)
 
     # -------------------------------------------------
-    # NORMALIZE RESPONSE
+    # DOWNLOAD
     # -------------------------------------------------
-    if isinstance(data, dict) and "leads" in data:
-        leads = data["leads"]
-    elif isinstance(data, dict) and "data" in data:
-        leads = data["data"]
-    elif isinstance(data, list):
-        leads = data
-    else:
-        leads = []
+    csv = df.to_csv(index=False)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
 
-    if not leads:
-        st.warning("No leads returned")
-        st.json(data)
-        st.stop()
-
-    df = pd.DataFrame(leads)
-
-    st.success(f"✅ {len(df)} leads generated")
-
-    if keyword:
-        st.info(f"🔑 Keyword used: {keyword}")
-
-    st.subheader("🔍 Preview (first 10 results)")
-    st.dataframe(df.head(10), use_container_width=True)
-
-    col_dl1, col_dl2 = st.columns(2)
-
-    with col_dl1:
-        st.download_button(
-            "⬇ Download CSV",
-            df.to_csv(index=False),
-            file_name="leads.csv",
-            mime="text/csv"
-        )
-
-    with col_dl2:
-        st.download_button(
-            "⬇ Download JSON",
-            df.to_json(orient="records"),
-            file_name="leads.json",
-            mime="application/json"
-        )
+    st.download_button(
+        label="⬇ Download CSV",
+        data=csv,
+        file_name=f"leads_{sector}_{city}_{timestamp}.csv",
+        mime="text/csv",
+    )
