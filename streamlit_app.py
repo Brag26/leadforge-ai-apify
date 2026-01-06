@@ -1,7 +1,8 @@
 import streamlit as st
-import requests
 import pandas as pd
 import pycountry
+import os
+from apify_client import ApifyClient
 
 # -------------------------------------------------
 # PAGE CONFIG
@@ -14,7 +15,20 @@ st.set_page_config(
 st.title("🌍 Multi-Sector Lead Generator")
 
 # -------------------------------------------------
-# SECTORS (24)
+# APIFY CLIENT SETUP
+# -------------------------------------------------
+APIFY_TOKEN = os.getenv("APIFY_API_TOKEN")
+
+if not APIFY_TOKEN:
+    st.error("❌ APIFY_API_TOKEN environment variable not set")
+    st.stop()
+
+client = ApifyClient(APIFY_TOKEN)
+
+ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"
+
+# -------------------------------------------------
+# SECTORS
 # -------------------------------------------------
 SECTORS = [
     "Healthcare",
@@ -44,12 +58,12 @@ SECTORS = [
 ]
 
 # -------------------------------------------------
-# COUNTRIES (ALL)
+# COUNTRIES
 # -------------------------------------------------
 COUNTRIES = sorted([c.name for c in pycountry.countries])
 
 # -------------------------------------------------
-# INPUT FORM (SCHEMA-ALIGNED)
+# INPUT FORM (MATCHES APIFY SCHEMA)
 # -------------------------------------------------
 with st.form("lead_form"):
     col1, col2, col3 = st.columns(3)
@@ -97,11 +111,10 @@ with st.form("lead_form"):
 # ACTION
 # -------------------------------------------------
 if submitted:
-    with st.spinner("Generating leads… please wait"):
+    with st.spinner("🚀 Running Apify actor… please wait"):
         try:
-            res = requests.post(
-                "http://localhost:8000/generate-leads",
-                json={
+            run = client.actor(ACTOR_ID).call(
+                run_input={
                     "sector": sector,
                     "country": country,
                     "state": state,
@@ -110,37 +123,26 @@ if submitted:
                     "keyword": keyword,
                     "maxResults": max_results
                 },
-                timeout=300
+                timeout_secs=180
             )
         except Exception as e:
-            st.error(f"❌ Backend connection failed: {e}")
+            st.error(f"❌ Failed to run Apify actor: {e}")
             st.stop()
 
-    if res.status_code != 200:
-        st.error("❌ Failed to generate leads")
-        st.text(res.text)
+    dataset_id = run.get("defaultDatasetId")
+
+    if not dataset_id:
+        st.error("❌ No dataset returned from actor")
+        st.json(run)
         st.stop()
 
-    data = res.json()
-
-    # -------------------------------------------------
-    # NORMALIZE BACKEND RESPONSE
-    # -------------------------------------------------
-    if isinstance(data, dict) and "leads" in data:
-        leads = data["leads"]
-    elif isinstance(data, dict) and "data" in data:
-        leads = data["data"]
-    elif isinstance(data, list):
-        leads = data
-    else:
-        leads = []
+    leads = client.dataset(dataset_id).list_items().items
 
     # -------------------------------------------------
     # OUTPUT
     # -------------------------------------------------
     if not leads:
-        st.warning("No leads returned")
-        st.json(data)
+        st.warning("⚠ No leads returned")
         st.stop()
 
     df = pd.DataFrame(leads)
