@@ -49,16 +49,7 @@ SECTORS = [
 COUNTRIES = sorted([c.name for c in pycountry.countries])
 
 # -------------------------------------------------
-# HELPERS
-# -------------------------------------------------
-def parse_keywords(text: str):
-    if not text:
-        return []
-    raw = text.replace("\n", ",").split(",")
-    return [k.strip() for k in raw if k.strip()]
-
-# -------------------------------------------------
-# INPUT FORM
+# INPUT FORM (SCHEMA-ALIGNED)
 # -------------------------------------------------
 with st.form("lead_form"):
     col1, col2, col3 = st.columns(3)
@@ -67,37 +58,37 @@ with st.form("lead_form"):
         sector = st.selectbox("Sector", SECTORS, index=0)
 
     with col2:
-        city = st.text_input("City / Suburb", "Colebee")
-
-    with col3:
-        postcode = st.text_input("Postcode", "2761")
-
-    col4, col5 = st.columns(2)
-
-    with col4:
         country = st.selectbox(
-            "Country",
+            "Country (Optional)",
             COUNTRIES,
             index=COUNTRIES.index("Australia") if "Australia" in COUNTRIES else 0
         )
 
+    with col3:
+        state = st.text_input("State / Province (Optional)", "")
+
+    col4, col5, col6 = st.columns(3)
+
+    with col4:
+        city = st.text_input("City / Suburb (Optional)", "")
+
     with col5:
+        postcode = st.text_input("Postcode / ZIP Code (Optional)", "")
+
+    with col6:
         max_results = st.slider(
-            "Max Results",
-            min_value=10,
-            max_value=500,
-            value=100,
-            step=10
+            "Maximum Results",
+            min_value=1,
+            max_value=100,
+            value=10,
+            step=1
         )
 
-    # -------------------------------------------------
-    # KEYWORDS SECTION (NEW)
-    # -------------------------------------------------
-    st.markdown("### 🔑 Keywords (Optional)")
+    st.markdown("### 🔑 Keyword (Optional)")
 
-    keywords_input = st.text_area(
-        "Enter keywords (comma or new line separated)",
-        placeholder="dentist, dental clinic\ncosmetic dentist\nimplant specialist"
+    keyword = st.text_input(
+        "Keyword",
+        placeholder="clinic, software company, agency"
     )
 
     submitted = st.form_submit_button("🚀 Generate Leads")
@@ -106,18 +97,17 @@ with st.form("lead_form"):
 # ACTION
 # -------------------------------------------------
 if submitted:
-    keywords = parse_keywords(keywords_input)
-
     with st.spinner("Generating leads… please wait"):
         try:
             res = requests.post(
                 "http://localhost:8000/generate-leads",
                 json={
                     "sector": sector,
+                    "country": country,
+                    "state": state,
                     "city": city,
                     "postcode": postcode,
-                    "country": country,
-                    "keywords": keywords,   # 👈 added to payload
+                    "keyword": keyword,
                     "maxResults": max_results
                 },
                 timeout=300
@@ -134,7 +124,7 @@ if submitted:
     data = res.json()
 
     # -------------------------------------------------
-    # NORMALIZE BACKEND RESPONSE (CRITICAL FIX)
+    # NORMALIZE BACKEND RESPONSE
     # -------------------------------------------------
     if isinstance(data, dict) and "leads" in data:
         leads = data["leads"]
@@ -146,7 +136,7 @@ if submitted:
         leads = []
 
     # -------------------------------------------------
-    # OUTPUT UX
+    # OUTPUT
     # -------------------------------------------------
     if not leads:
         st.warning("No leads returned")
@@ -157,8 +147,8 @@ if submitted:
 
     st.success(f"✅ {len(df)} leads generated")
 
-    if keywords:
-        st.info(f"🔑 Keywords used: {', '.join(keywords)}")
+    if keyword:
+        st.info(f"🔑 Keyword used: {keyword}")
 
     st.subheader("🔍 Preview (first 10 results)")
     st.dataframe(df.head(10), use_container_width=True)
