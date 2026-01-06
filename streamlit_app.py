@@ -7,14 +7,14 @@ import pycountry
 # PAGE CONFIG
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Multi-LLM AI-Powered Lead Generator",
+    page_title="Multi-Sector Lead Generator",
     layout="wide"
 )
 
-st.title("🌍 Multi-LLM AI-Powered Lead Generator")
+st.title("🌍 Multi-Sector Lead Generator")
 
 # -------------------------------------------------
-# SECTORS (24) — must match input_schema.json
+# SECTORS (24)
 # -------------------------------------------------
 SECTORS = [
     "Healthcare",
@@ -44,24 +44,24 @@ SECTORS = [
 ]
 
 # -------------------------------------------------
-# COUNTRIES
+# COUNTRIES (ALL)
 # -------------------------------------------------
 COUNTRIES = sorted([c.name for c in pycountry.countries])
 
 # -------------------------------------------------
-# INPUT FORM (SCHEMA MATCHED)
+# INPUT FORM (SCHEMA-ALIGNED)
 # -------------------------------------------------
 with st.form("lead_form"):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        sector = st.selectbox("Sector", SECTORS)
+        sector = st.selectbox("Sector", SECTORS, index=0)
 
     with col2:
         country = st.selectbox(
             "Country (Optional)",
-            [""] + COUNTRIES,
-            index=COUNTRIES.index("Australia") + 1 if "Australia" in COUNTRIES else 0
+            COUNTRIES,
+            index=COUNTRIES.index("Australia") if "Australia" in COUNTRIES else 0
         )
 
     with col3:
@@ -80,14 +80,15 @@ with st.form("lead_form"):
             "Maximum Results",
             min_value=1,
             max_value=100,
-            value=10
+            value=10,
+            step=1
         )
 
     st.markdown("### 🔑 Keyword (Optional)")
 
     keyword = st.text_input(
-        "Keyword to refine search",
-        placeholder="e.g., dental clinic, software company"
+        "Keyword",
+        placeholder="clinic, software company, agency"
     )
 
     submitted = st.form_submit_button("🚀 Generate Leads")
@@ -96,24 +97,19 @@ with st.form("lead_form"):
 # ACTION
 # -------------------------------------------------
 if submitted:
-    payload = {
-        "sector": sector,
-        "country": country,
-        "state": state,
-        "city": city,
-        "postcode": postcode,
-        "keyword": keyword,
-        "maxResults": max_results
-    }
-
-    # remove empty optional fields
-    payload = {k: v for k, v in payload.items() if v not in ["", None]}
-
     with st.spinner("Generating leads… please wait"):
         try:
             res = requests.post(
                 "http://localhost:8000/generate-leads",
-                json=payload,
+                json={
+                    "sector": sector,
+                    "country": country,
+                    "state": state,
+                    "city": city,
+                    "postcode": postcode,
+                    "keyword": keyword,
+                    "maxResults": max_results
+                },
                 timeout=300
             )
         except Exception as e:
@@ -128,7 +124,7 @@ if submitted:
     data = res.json()
 
     # -------------------------------------------------
-    # NORMALIZE RESPONSE
+    # NORMALIZE BACKEND RESPONSE
     # -------------------------------------------------
     if isinstance(data, dict) and "leads" in data:
         leads = data["leads"]
@@ -139,6 +135,9 @@ if submitted:
     else:
         leads = []
 
+    # -------------------------------------------------
+    # OUTPUT
+    # -------------------------------------------------
     if not leads:
         st.warning("No leads returned")
         st.json(data)
