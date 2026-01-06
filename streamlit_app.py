@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 from apify_client import ApifyClient
 from datetime import datetime
 
@@ -20,7 +19,7 @@ def check_login():
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        users = st.secrets["users"]  # ✅ Correct access
+        users = st.secrets["users"]
 
         if username in users and password == users[username]["password"]:
             st.session_state.authenticated = True
@@ -37,7 +36,7 @@ def check_login():
 check_login()
 
 # -------------------------------------------------
-# PAGE CONFIG (MUST BE AFTER LOGIN CHECK)
+# PAGE CONFIG
 # -------------------------------------------------
 st.set_page_config(
     page_title="Multi-Sector Lead Generator",
@@ -46,17 +45,17 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# CONFIG
+# APIFY CONFIG
 # -------------------------------------------------
 APIFY_TOKEN = st.secrets.get("APIFY_TOKEN")
 
 if not APIFY_TOKEN:
-    st.error("APIFY_TOKEN is missing. Add it to Streamlit Secrets.")
+    st.error("APIFY_TOKEN is missing in Streamlit Secrets.")
     st.stop()
 
 client = ApifyClient(APIFY_TOKEN)
 
-ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"  # replace if needed
+ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"
 
 # -------------------------------------------------
 # HEADER
@@ -64,22 +63,38 @@ ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"  # replace if needed
 st.title("🌍 Multi-Sector Lead Generator")
 st.caption(f"Logged in as **{st.session_state.username}** ({st.session_state.role})")
 
-# Logout
 if st.button("🚪 Logout"):
     st.session_state.clear()
     st.rerun()
 
 # -------------------------------------------------
-# INPUT OPTIONS
+# SECTORS (⚠️ EXACT ENUM MATCH)
 # -------------------------------------------------
 SECTORS = [
-    "Healthcare", "Dentists", "Real Estate", "Lawyers", "Restaurants",
-    "Construction", "Education", "Automotive", "Finance", "Insurance",
-    "IT Services", "Marketing Agencies", "Beauty & Wellness",
-    "Gyms & Fitness", "Hotels", "Travel Agencies",
-    "Manufacturing", "Logistics", "Retail",
-    "E-commerce", "Cleaning Services",
-    "Home Services", "Consultants", "Others"
+    "Healthcare",
+    "Real Estate",
+    "Manufacturing",
+    "IT & Technology",
+    "Education & Training",
+    "Legal Services",
+    "Financial Services",
+    "Hospitality & Tourism",
+    "Retail & E-commerce",
+    "Food & Beverage",
+    "Construction",
+    "Automotive",
+    "Marketing & Advertising",
+    "Consulting",
+    "Logistics & Transportation",
+    "Beauty & Wellness",
+    "Entertainment & Media",
+    "Agriculture",
+    "Energy & Utilities",
+    "Telecommunications",
+    "Insurance",
+    "Professional Services",
+    "Non-Profit & NGO",
+    "Sports & Fitness"
 ]
 
 COUNTRIES = [
@@ -91,6 +106,9 @@ COUNTRIES = [
     "Thailand", "Japan", "South Korea"
 ]
 
+# -------------------------------------------------
+# INPUT UI
+# -------------------------------------------------
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -113,7 +131,7 @@ with col5:
 st.markdown("### 🔑 Keywords (Optional)")
 keywords = st.text_area(
     "Enter keywords (comma or new line separated)",
-    placeholder="dentist, dental clinic\ncosmetic dentist\nimplant specialist"
+    placeholder="clinic, company, services\nlocal business"
 )
 
 # -------------------------------------------------
@@ -122,7 +140,7 @@ keywords = st.text_area(
 if st.button("🚀 Generate Leads"):
     with st.spinner("Running Apify Actor…"):
         run_input = {
-            "sector": sector,
+            "sector": sector,              # ✅ Enum-safe
             "city": city.strip(),
             "postcode": postcode.strip(),
             "country": country,
@@ -136,12 +154,9 @@ if st.button("🚀 Generate Leads"):
             items = list(client.dataset(dataset_id).iterate_items())
 
         except Exception as e:
-            st.error(f"❌ Failed to run actor: {e}")
+            st.error(f"❌ Actor execution failed: {e}")
             st.stop()
 
-    # -------------------------------------------------
-    # RESULTS
-    # -------------------------------------------------
     if not items:
         st.warning("⚠️ No leads returned.")
         st.stop()
@@ -158,8 +173,8 @@ if st.button("🚀 Generate Leads"):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
 
     st.download_button(
-        label="⬇ Download CSV",
-        data=csv,
-        file_name=f"leads_{sector}_{city}_{timestamp}.csv",
-        mime="text/csv",
+        "⬇ Download CSV",
+        csv,
+        f"leads_{sector}_{city}_{timestamp}.csv",
+        "text/csv",
     )
