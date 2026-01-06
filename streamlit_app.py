@@ -1,32 +1,39 @@
 import streamlit as st
 import pandas as pd
 import pycountry
-import os
 from apify_client import ApifyClient
 
 # =================================================
-# 🔐 STREAMLIT LOGIN (USES st.secrets)
+# 🔐 MULTI-USER AUTH (STREAMLIT NATIVE)
 # =================================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.role = None
 
 if not st.session_state.authenticated:
+    st.set_page_config(page_title="Login | LeadForge", layout="centered")
     st.title("🔐 LeadForge Login")
 
-    password = st.text_input("Enter password", type="password")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        if password == st.secrets["APP_PASSWORD"]:
+        users = st.secrets["users"]
+
+        if username in users and password == users[username]["password"]:
             st.session_state.authenticated = True
+            st.session_state.username = username
+            st.session_state.role = users[username].get("role", "user")
             st.rerun()
         else:
-            st.error("❌ Incorrect password")
+            st.error("❌ Invalid username or password")
 
     st.stop()
 
-# -------------------------------------------------
-# PAGE CONFIG
-# -------------------------------------------------
+# =================================================
+# PAGE CONFIG (AFTER LOGIN)
+# =================================================
 st.set_page_config(
     page_title="Multi-Sector Lead Generator",
     layout="wide"
@@ -34,17 +41,13 @@ st.set_page_config(
 
 st.title("🌍 Multi-Sector Lead Generator")
 
+st.sidebar.success(f"👤 Logged in as: {st.session_state.username}")
+st.sidebar.caption(f"Role: {st.session_state.role}")
+
 # -------------------------------------------------
-# APIFY CLIENT SETUP
+# APIFY CLIENT
 # -------------------------------------------------
-APIFY_TOKEN = st.secrets["APIFY_API_TOKEN"]
-
-if not APIFY_TOKEN:
-    st.error("❌ APIFY_API_TOKEN not set in secrets")
-    st.stop()
-
-client = ApifyClient(APIFY_TOKEN)
-
+client = ApifyClient(st.secrets["APIFY_API_TOKEN"])
 ACTOR_ID = "sree_brag/multi-sector-lead-generator-actor"
 
 # -------------------------------------------------
@@ -77,121 +80,76 @@ SECTORS = [
     "Sports & Fitness"
 ]
 
-# -------------------------------------------------
-# COUNTRIES
-# -------------------------------------------------
 COUNTRIES = sorted([c.name for c in pycountry.countries])
 
 # -------------------------------------------------
-# INPUT FORM (MATCHES APIFY SCHEMA)
+# INPUT FORM
 # -------------------------------------------------
 with st.form("lead_form"):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        sector = st.selectbox("Sector", SECTORS, index=0)
+        sector = st.selectbox("Sector", SECTORS)
 
     with col2:
         country = st.selectbox(
-            "Country (Optional)",
+            "Country",
             COUNTRIES,
             index=COUNTRIES.index("Australia") if "Australia" in COUNTRIES else 0
         )
 
     with col3:
-        state = st.text_input("State / Province (Optional)", "")
+        state = st.text_input("State / Province")
 
     col4, col5, col6 = st.columns(3)
 
     with col4:
-        city = st.text_input("City / Suburb (Optional)", "")
+        city = st.text_input("City / Suburb")
 
     with col5:
-        postcode = st.text_input("Postcode / ZIP Code (Optional)", "")
+        postcode = st.text_input("Postcode / ZIP Code")
 
     with col6:
-        max_results = st.slider(
-            "Maximum Results",
-            min_value=1,
-            max_value=100,
-            value=10,
-            step=1
-        )
+        max_results = st.slider("Max Results", 1, 100, 10)
 
-    st.markdown("### 🔑 Keyword (Optional)")
-
-    keyword = st.text_input(
-        "Keyword",
-        placeholder="clinic, software company, agency"
-    )
-
+    keyword = st.text_input("Keyword (Optional)")
     submitted = st.form_submit_button("🚀 Generate Leads")
 
 # -------------------------------------------------
 # ACTION
 # -------------------------------------------------
 if submitted:
-    with st.spinner("🚀 Running Apify actor… please wait"):
-        try:
-            run = client.actor(ACTOR_ID).call(
-                run_input={
-                    "sector": sector,
-                    "country": country,
-                    "state": state,
-                    "city": city,
-                    "postcode": postcode,
-                    "keyword": keyword,
-                    "maxResults": max_results
-                },
-                timeout_secs=180
-            )
-        except Exception as e:
-            st.error(f"❌ Failed to run Apify actor: {e}")
-            st.stop()
+    with st.spinner("🚀 Running Apify actor…"):
+        run = client.actor(ACTOR_ID).call(
+            run_input={
+                "sector": sector,
+                "country": country,
+                "state": state,
+                "city": city,
+                "postcode": postcode,
+                "keyword": keyword,
+                "maxResults": max_results
+            },
+            timeout_secs=180
+        )
 
     dataset_id = run.get("defaultDatasetId")
-
-    if not dataset_id:
-        st.error("❌ No dataset returned from actor")
-        st.json(run)
-        st.stop()
-
     leads = client.dataset(dataset_id).list_items().items
 
-    # -------------------------------------------------
-    # OUTPUT
-    # -------------------------------------------------
     if not leads:
-        st.warning("⚠ No leads returned")
+        st.warning("No leads found")
         st.stop()
 
     df = pd.DataFrame(leads)
-
     st.success(f"✅ {len(df)} leads generated")
-
-    if keyword:
-        st.info(f"🔑 Keyword used: {keyword}")
-
-    st.subheader("🔍 Preview (first 10 results)")
     st.dataframe(df.head(10), use_container_width=True)
 
-    col_dl1, col_dl2 = st.columns(2)
-
-    with col_dl1:
-        st.download_button(
-            "⬇ Download CSV",
-            df.to_csv(index=False),
-            file_name="leads.csv",
-            mime="text/csv"
-        )
-
-    with col_dl2:
-        st.download_button(
-            "⬇ Download JSON",
-            df.to_json(orient="records"),
-            file_name="leads.json",
-            mime="application/json"
-        )
+    st.download_button(
+        "⬇ Download CSV",
+        df.to_csv(index=False),
+        "leads.csv",
+        "text/csv"
+    )
 
 # -------------------------------------------------
 # LOGOUT
@@ -199,4 +157,6 @@ if submitted:
 st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Logout"):
     st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.role = None
     st.rerun()
