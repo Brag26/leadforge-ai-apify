@@ -4,6 +4,26 @@ import pycountry
 import os
 from apify_client import ApifyClient
 
+# =================================================
+# 🔐 STREAMLIT LOGIN (USES st.secrets)
+# =================================================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔐 LeadForge Login")
+
+    password = st.text_input("Enter password", type="password")
+
+    if st.button("Login"):
+        if password == st.secrets["APP_PASSWORD"]:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("❌ Incorrect password")
+
+    st.stop()
+
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
@@ -17,10 +37,10 @@ st.title("🌍 Multi-Sector Lead Generator")
 # -------------------------------------------------
 # APIFY CLIENT SETUP
 # -------------------------------------------------
-APIFY_TOKEN = os.getenv("APIFY_API_TOKEN")
+APIFY_TOKEN = st.secrets["APIFY_API_TOKEN"]
 
 if not APIFY_TOKEN:
-    st.error("❌ APIFY_API_TOKEN environment variable not set")
+    st.error("❌ APIFY_API_TOKEN not set in secrets")
     st.stop()
 
 client = ApifyClient(APIFY_TOKEN)
@@ -172,3 +192,11 @@ if submitted:
             file_name="leads.json",
             mime="application/json"
         )
+
+# -------------------------------------------------
+# LOGOUT
+# -------------------------------------------------
+st.sidebar.markdown("---")
+if st.sidebar.button("🚪 Logout"):
+    st.session_state.authenticated = False
+    st.rerun()
